@@ -1,4 +1,6 @@
 # gsdcchallenge2
 
-these are changes to https://github.com/weisongwen/GraphGNSSLib.git
-for google smartphone decimeter 2022 challenge
+2 approaches for gsdc2
+1) via factor graph optimization in directory GraphGNSSLib
+2) via rtklib
+
