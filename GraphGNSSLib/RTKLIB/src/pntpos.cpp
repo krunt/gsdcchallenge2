@@ -75,20 +75,20 @@ FILE* gnss_ublox_wls = fopen("gnss_ublox_wls.csv", "w+");
 #define REL_HUMI    0.7         /* relative humidity for Saastamoinen model */
 #define MIN_EL      (5.0*D2R)   /* min elevation for measurement error (rad) */
 
-ros::Publisher pub_pntpos_odometry;
-ros::Publisher pub_wls_odometry;
+// ros::Publisher pub_pntpos_odometry;
+// ros::Publisher pub_wls_odometry;
 
-ros::Publisher pub_gnss_raw;
-ros::Publisher pub_velocity_from_doppler;
+// ros::Publisher pub_gnss_raw;
+// ros::Publisher pub_velocity_from_doppler;
 
 GNSS_Tools m_GNSS_Tools; // utilities
 
 extern void pntposRegisterPub(ros::NodeHandle &n)
 {
-    pub_pntpos_odometry = n.advertise<nav_msgs::Odometry>("WLSENURTKLIB", 1000);
-    pub_gnss_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarRov1", 1000);
-    pub_wls_odometry = n.advertise<nav_msgs::Odometry>("WLSENUGoGPS", 1000);
-    pub_velocity_from_doppler = n.advertise<nav_msgs::Odometry>("GNSSDopVelRov1", 1000); // velocity_from_doppler
+    // pub_pntpos_odometry = n.advertise<nav_msgs::Odometry>("WLSENURTKLIB", 1000);
+    // pub_gnss_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarRov1", 1000);
+    // pub_wls_odometry = n.advertise<nav_msgs::Odometry>("WLSENUGoGPS", 1000);
+    // pub_velocity_from_doppler = n.advertise<nav_msgs::Odometry>("GNSSDopVelRov1", 1000); // velocity_from_doppler
 }
 
 /* pseudorange measurement error variance ------------------------------------*/
@@ -117,6 +117,7 @@ static double varerr(const prcopt_t *opt, const ssat_t *ssat, const obsd_t *obs,
     varr*=SQR(opt->eratio[0]);
     if (opt->err[7]>0.0) {
         varr+=SQR(opt->err[7]*0.01*(1<<(obs->Pstd[0]+5)));  /* 0.01*2^(n+5) m */
+        //varr += SQR(obs->Pstd[0]);
     }
     if (opt->ionoopt==IONOOPT_IFLC) varr*=SQR(3.0); /* iono-free */
     return SQR(fact)*varr;
@@ -739,6 +740,15 @@ extern int pntpos(const obsd_t *obs, int n, const nav_t *nav,
     /* estimate receiver position and time with pseudorange */
     stat=estpos(obs,n,rs,dts,var,svh,nav,&opt_,ssat,sol,azel_,vsat,resp,msg);
 
+        /* RAIM FDE */
+    if (!stat&&n>=6&&opt->posopt[4]) {
+        stat=raim_fde(obs,n,rs,dts,var,svh,nav,&opt_,ssat,sol,azel_,vsat,resp,msg);
+    }
+    /* estimate receiver velocity with Doppler */
+    if (stat) {
+        estvel(obs,n,rs,dts,nav,&opt_,sol,azel_,vsat);
+    }
+
     /* estimate receiver position with pseudorange by WLS and Eigen */
     bool haveOneBeiDou = false;
     int CMP_cnt = 0, GPS_cnt = 0;
@@ -804,9 +814,17 @@ extern int pntpos(const obsd_t *obs, int n, const nav_t *nav,
         gnss_raw.err_iono = dion;
 
         gnss_raw.sat_clk_err = dts[0+ s_i * 2] * CLIGHT;
+        gnss_raw.sat_clk_drift_err = dts[1+ s_i * 2] * CLIGHT;
         gnss_raw.sat_pos_x = rs[0 + s_i * 6];
         gnss_raw.sat_pos_y = rs[1 + s_i * 6];
         gnss_raw.sat_pos_z = rs[2 + s_i * 6];
+        gnss_raw.sat_pos_vx = rs[3 + s_i * 6];
+        gnss_raw.sat_pos_vy = rs[4 + s_i * 6];
+        gnss_raw.sat_pos_vz = rs[5 + s_i * 6];
+        gnss_raw.doppler = obs[s_i].D[0] * (CLIGHT/freq);
+        gnss_raw.rover_vx = sol->rr[3];
+        gnss_raw.rover_vy = sol->rr[4];
+        gnss_raw.rover_vz = sol->rr[5];
 
         /* get pr*/
         double pr = 0;
@@ -858,19 +876,11 @@ extern int pntpos(const obsd_t *obs, int n, const nav_t *nav,
         
     }
 
-    LOG(INFO) << "GPS_cnt   "<<GPS_cnt;
-    LOG(INFO) << "CMP_cnt   "<<CMP_cnt;
+    // LOG(INFO) << "GPS_cnt   "<<GPS_cnt;
+    // LOG(INFO) << "CMP_cnt   "<<CMP_cnt;
     
-    pub_gnss_raw.publish(gnss_data);
+    // pub_gnss_raw.publish(gnss_data);
     
-    /* RAIM FDE */
-    if (!stat&&n>=6&&opt->posopt[4]) {
-        stat=raim_fde(obs,n,rs,dts,var,svh,nav,&opt_,ssat,sol,azel_,vsat,resp,msg);
-    }
-    /* estimate receiver velocity with Doppler */
-    if (stat) {
-        estvel(obs,n,rs,dts,nav,&opt_,sol,azel_,vsat);
-    }
 
 
     nav_msgs::Odometry odometry;
@@ -906,7 +916,7 @@ extern int pntpos(const obsd_t *obs, int n, const nav_t *nav,
         // odometry.twist.covariance[2] = sqrt(covarianceMatrix(2,2));
     }
     
-    pub_velocity_from_doppler.publish(odometry);
+    // pub_velocity_from_doppler.publish(odometry);
 
     if (azel) {
         for (i=0;i<n*2;i++) azel[i]=azel_[i];

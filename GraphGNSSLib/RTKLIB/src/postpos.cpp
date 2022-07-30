@@ -123,12 +123,12 @@ static gtime_t invalidtm[MAXINVALIDTM]={{0}};/* invalid time marks */
 static rtcm_t rtcm;             /* rtcm control struct */
 static FILE *fp_rtcm=NULL;      /* rtcm data file pointer */
 
-ros::Publisher pub_postpos_odometry;
+// ros::Publisher pub_postpos_odometry;
 
 
 extern void postposRegisterPub(ros::NodeHandle &n)
 {
-    pub_postpos_odometry = n.advertise<nav_msgs::Odometry>("postpos_odometry", 1000);
+    // pub_postpos_odometry = n.advertise<nav_msgs::Odometry>("postpos_odometry", 1000);
 
 }
 

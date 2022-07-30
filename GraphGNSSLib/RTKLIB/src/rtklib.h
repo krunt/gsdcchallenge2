@@ -541,9 +541,13 @@ extern "C" {
 #define ref_lat    -122.204262         /* Weisong: reference latitude */
 #define ref_alt    63.69         /* Weisong: reference altitude */
 
-#define station_x     -2703115.92       /* Weisong: pose x of base station */
-#define station_y     -4291767.2        /* Weisong: pose y of base station */
-#define station_z     3854247.9        /* Weisong: pose z of station */
+// #define station_x     -2703115.92       /* Weisong: pose x of base station */
+// #define station_y     -4291767.2        /* Weisong: pose y of base station */
+// #define station_z     3854247.9        /* Weisong: pose z of station */
+
+extern double station_x;
+extern double station_y;
+extern double station_z;
 
 
 // #define start_gps_sec 270149
@@ -551,15 +555,15 @@ extern "C" {
 
 #else
 
-/** TST data, evaluation for GPS solutions (dynamic, loop) **/
-#define ref_lon    114.179000972         /* Weisong: reference longitude */
-#define ref_lat    22.3011535667        /* Weisong: reference latitude */
-#define ref_alt    6.42821512092                /* Weisong: reference altitude */
-#define station_x     -2414266.9200       /* Weisong: pose x of base station */
-#define station_y     5386768.9870        /* Weisong: pose y of base station */
-#define station_z     2407460.0310        /* Weisong: pose z of station */
-// #define start_gps_sec 46701
-// #define end_gps_sec 47185
+// /** TST data, evaluation for GPS solutions (dynamic, loop) **/
+// #define ref_lon    114.179000972         /* Weisong: reference longitude */
+// #define ref_lat    22.3011535667        /* Weisong: reference latitude */
+// #define ref_alt    6.42821512092                /* Weisong: reference altitude */
+// #define station_x     -2414266.9200       /* Weisong: pose x of base station */
+// #define station_y     5386768.9870        /* Weisong: pose y of base station */
+// #define station_z     2407460.0310        /* Weisong: pose z of station */
+// // #define start_gps_sec 46701
+// // #define end_gps_sec 47185
 
 
 #endif

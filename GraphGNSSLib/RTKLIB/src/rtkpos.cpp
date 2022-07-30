@@ -73,6 +73,7 @@
 #include <geometry_msgs/PointStamped.h>
 #include <novatel_oem7_msgs/INSPVAX.h> // novatel_msgs/INSPVAX
 #include <novatel_oem7_msgs/BESTPOS.h> // novatel_msgs/INSPVAX
+#include <rosbag/bag.h>
 
 #include <nlosExclusion/GNSS_Raw_Array.h>
 #include <nlosExclusion/GNSS_Raw.h>
@@ -81,6 +82,10 @@
 #define delayms 40 // 200
 
 /* constants/macros ----------------------------------------------------------*/
+
+double station_x = -2703115.92;
+double station_y = -4291767.2;
+double station_z = 3854247.9;
 
 #define SQR(x)      ((x)*(x))
 #define SQRT(x)     ((x)<=0.0||(x)!=(x)?0.0:sqrt(x))
@@ -130,19 +135,22 @@ static char file_stat[1024]="";  /* rtk status file original path */
 static gtime_t time_stat={0};    /* rtk status file time */
 
 
-ros::Publisher pub_rtkpos_odometry_float,pub_rtkpos_odometry_integer;
-ros::Publisher pub_rover_raw;
-ros::Publisher pub_station_raw;
-ros::Publisher pub_velocity_from_adr;
+// ros::Publisher pub_rtkpos_odometry_float,pub_rtkpos_odometry_integer;
+// ros::Publisher pub_rover_raw;
+// ros::Publisher pub_station_raw;
+// ros::Publisher pub_velocity_from_adr;
 GNSS_Tools m_GNSS_Tools_rtkpos; // utilities
+
+rosbag::Bag g_bag;
 
 extern void rtkposRegisterPub(ros::NodeHandle &n)
 {
-    pub_rtkpos_odometry_float = n.advertise<nav_msgs::Odometry>("ENUFloatRTK", 1000); // rtk_float_odometry
-    pub_rtkpos_odometry_integer = n.advertise<nav_msgs::Odometry>("ENUIntegerRTK", 1000); //rtk_integer_odometry
-    pub_rover_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarRover1", 1000);
-    pub_station_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarStation1", 1000);
-    pub_velocity_from_adr = n.advertise<nav_msgs::Odometry>("GNSSAdrVelRov1", 1000); // velocity_from_adr
+    // pub_rtkpos_odometry_float = n.advertise<nav_msgs::Odometry>("ENUFloatRTK", 1000); // rtk_float_odometry
+    // pub_rtkpos_odometry_integer = n.advertise<nav_msgs::Odometry>("ENUIntegerRTK", 1000); //rtk_integer_odometry
+    // pub_rover_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarRover1", 1000);
+    // pub_station_raw = n.advertise<nlosExclusion::GNSS_Raw_Array>("GNSSPsrCarStation1", 1000);
+    // pub_velocity_from_adr = n.advertise<nav_msgs::Odometry>("GNSSAdrVelRov1", 1000); // velocity_from_adr
+    g_bag.open("/home/alexey/rtklib.msg", rosbag::bagmode::Write);
 }
 
 /* open solution status file ---------------------------------------------------
@@ -2066,9 +2074,9 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         if (i == 0)
         {
 
-    int current_week;
+    int current_week = 0;
     double current_tow;
-    current_tow = time2gpst(obs[nu].time, &current_week);
+    current_tow = time2gpst(obs[0].time, &current_week);
     for (int rover = 0; rover < 2; ++rover)
     {
         nlosExclusion::GNSS_Raw_Array gnss_data;
@@ -2089,18 +2097,19 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
                 // if (rtk->ssat[obs[rix[is]].sat-1].slip[0] & LLI_SLIP)
                     // continue;
 
+                // ecef2pos(rr,pos);
+
                 {
                     nlosExclusion::GNSS_Raw gnss_raw;
                     gnss_raw.GNSS_time = current_tow;
+                    gnss_raw.GNSS_week = current_week;
                     gnss_raw.total_sv = float(ns); // same satellite with user end
                     gnss_raw.prn_satellites_index = float(obs[rix[is]].sat);
                     gnss_raw.snr = obs[rix[is]].SNR[f] * 0.25;
                     
-
                     gnss_raw.visable = rtk->ssat[obs[rix[is]].sat-1].slip[f]; // sat=obs[i].sat;
                     
                     gnss_raw.raw_pseudorange = obs[rix[is]].P[f];
-                    gnss_raw.carrier_phase = obs[rix[is]].L[f];
 
                     if (obs[rix[is]].P[f] == 0)
                         continue;
@@ -2116,9 +2125,18 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
                     gnss_raw.freqidx = f;
 
                     gnss_raw.sat_clk_err = dts[0+ rix[is] * 2] * CLIGHT;
+                    gnss_raw.sat_clk_drift_err = dts[1+ rix[is] * 2] * CLIGHT;
                     gnss_raw.sat_pos_x = rs[0 + rix[is] * 6];
                     gnss_raw.sat_pos_y = rs[1 + rix[is] * 6];
                     gnss_raw.sat_pos_z = rs[2 + rix[is] * 6];
+                    gnss_raw.sat_pos_vx = rs[3 + rix[is] * 6];
+                    gnss_raw.sat_pos_vy = rs[4 + rix[is] * 6];
+                    gnss_raw.sat_pos_vz = rs[5 + rix[is] * 6];
+                    gnss_raw.doppler = obs[rix[is]].D[f] * gnss_raw.lamda;
+                    gnss_raw.rover_vx = rtk->sol.rr[3];
+                    gnss_raw.rover_vy = rtk->sol.rr[4];
+                    gnss_raw.rover_vz = rtk->sol.rr[5];
+
 
                     int sysi = satsys(gnss_raw.prn_satellites_index, NULL);
                     for (int m=0;m<6;++m) {
@@ -2130,6 +2148,11 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
 
                     double rs[3] = {gnss_raw.sat_pos_x, gnss_raw.sat_pos_y,gnss_raw.sat_pos_z};
                     double rr[3] = {station_x,station_y,station_z};
+                    if (rover == 0) {
+                        rr[0] = xp[0];
+                        rr[1] = xp[1];
+                        rr[2] = xp[2];
+                    }
                     double e[3]={0};
                     double r = geodist(rs,rr,e);
                     double pos[3] = {0};
@@ -2139,6 +2162,20 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
                     // LOG(INFO)<<"azel->--------------------- "<<azel[0] * R2D;
                     // LOG(INFO)<<"azel->-------------------- "<<azel[1] * R2D;
 
+                    double dion,dtrp,vmeas,vion,vtrp;
+                    if (!ionocorr(obs[rix[is]].time,nav,obs[rix[is]].sat,pos,azel,
+                        opt->ionoopt,&dion,&vion)) continue;
+
+                    dion*=SQR(FREQL1/freq);
+                    vion*=SQR(FREQL1/freq);
+
+                    if (!tropcorr(obs[rix[is]].time,nav,pos,azel,opt->tropopt,&dtrp,&vtrp)) {
+                        continue;
+                    }
+                    // printf("dtrp %f \n", dtrp);
+                    gnss_raw.err_tropo = dtrp;
+                    gnss_raw.err_iono = dion;
+
                     gnss_raw.azimuth = azel[0] * R2D;
                     gnss_raw.elevation = azel[1] * R2D;
 
@@ -2147,6 +2184,10 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
 
                     gnss_raw.pseudorange = obs[rix[is]].P[f];
                     gnss_raw.pseudorange = gnss_raw.pseudorange + gnss_raw.sat_clk_err;
+
+                    gnss_raw.carrier_phase = obs[rix[is]].L[f] 
+                        + (gnss_raw.sat_clk_err - dtrp - dion) / gnss_raw.lamda;
+
                     gnss_data.GNSS_Raws.push_back(gnss_raw);
                     // any_added = true;
                 }
@@ -2155,10 +2196,17 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
             }
             
         }
+        // LOG(INFO) << "Gnss_Raws   "<< gnss_data.GNSS_Raws.size();
+        if (gnss_data.GNSS_Raws.size() > 0)
+        {
+            
         if (rover == 0)
-            pub_rover_raw.publish(gnss_data);
+            // pub_rover_raw.publish(gnss_data);
+            g_bag.write("rover", ros::Time::now(), gnss_data);
         else
-            pub_station_raw.publish(gnss_data);    
+            // pub_station_raw.publish(gnss_data);   
+            g_bag.write("station", ros::Time::now(), gnss_data); 
+        }
     }
         }
 
@@ -2288,7 +2336,7 @@ static int relpos(rtk_t *rtk, const obsd_t *obs, int nu, int nr,
         odometry.twist.covariance[1] = rtk->sol.qv[1]; // qv?
         odometry.twist.covariance[2] = rtk->sol.qv[2]; // qv?
 
-        pub_velocity_from_adr.publish(odometry);
+        // pub_velocity_from_adr.publish(odometry);
     }
 
     /* save phase measurements */
@@ -2445,7 +2493,7 @@ extern int rtkpos(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
     
     time=rtk->sol.time; /* previous epoch */
 
-    sleepms(delayms);
+    // sleepms(delayms);
     
     /* rover position and time by single point positioning */
     if (!pntpos(obs,nu,nav,&rtk->opt,&rtk->sol,NULL,rtk->ssat,msg)) {
@@ -2523,7 +2571,7 @@ extern int rtkpos(rtk_t *rtk, const obsd_t *obs, int n, const nav_t *nav)
     relpos(rtk,obs,nu,nr,nav);
     outsolstat(rtk,nav);
 
-    sleepms(delayms);
-    
+    // sleepms(delayms);
+
     return 1;
 }

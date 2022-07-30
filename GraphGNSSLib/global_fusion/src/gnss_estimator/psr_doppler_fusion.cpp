@@ -1,3 +1,4 @@
+#if 0
 /*******************************************************
  * Copyright (C) 2019, Intelligent Positioning and Navigation Lab, Hong Kong Polytechnic University
  * 
@@ -396,5 +397,12 @@ int main(int argc, char **argv)
 
     bag.close();
 
+    return 0;
+}
+
+#endif
+
+int main(int argc, char **argv)
+{
     return 0;
 }

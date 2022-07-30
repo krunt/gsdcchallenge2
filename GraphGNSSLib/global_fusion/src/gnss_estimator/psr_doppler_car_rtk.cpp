@@ -75,6 +75,32 @@
  /* factor graph related head file */
 #include "../../include/gnss_estimator/psr_doppler_car_rtk.h"
 
+// static double rand01()
+// {
+//     return (double)rand() / RAND_MAX;
+// }
+
+// static double randm11()
+// {
+//     auto ret = rand01();
+//     return ret * 2 - 1;
+// }
+
+std::vector<std::string> strSplit(std::string s, std::string delimiter) {
+    size_t pos_start = 0, pos_end, delim_len = delimiter.length();
+    std::string token;
+    std::vector<std::string> res;
+
+    while ((pos_end = s.find (delimiter, pos_start)) != std::string::npos) {
+        token = s.substr (pos_start, pos_end - pos_start);
+        pos_start = pos_end + delim_len;
+        res.push_back (token);
+    }
+
+    res.push_back (s.substr (pos_start));
+    return res;
+}
+
 class psr_doppler_car_rtk
 {
     ros::NodeHandle nh;
@@ -82,7 +108,7 @@ class psr_doppler_car_rtk
     /* ros subscriber */
     ros::Publisher pub_WLSENU, pub_FGOENU, pub_global_path, pub_fgo_llh;
     std::map<double, nlosExclusion::GNSS_Raw_Array> gnss_raw_map;
-    std::map<double, nav_msgs::Odometry> doppler_map;
+    // std::map<double, nav_msgs::Odometry> doppler_map;
     std::map<double, nlosExclusion::GNSS_Raw_Array> station_gnss_raw_map;
 
     GNSS_Tools m_GNSS_Tools; // utilities  
@@ -110,6 +136,8 @@ class psr_doppler_car_rtk
     /* path in ENU */
     nav_msgs::Path fgo_path;
 
+    std::string inputSolPath, outputSolPath;
+
 private:
     // std::unique_ptr<factor_graph> factor_graph_ptr_; // factor graph ptr
     FactorGraph factor_graph;
@@ -124,6 +152,7 @@ private:
 
         /* set up loss functions (Huber, Cauchy)*/
         factor_graph.setupLossFunction("Huber");
+        // factor_graph.setupLossFunction("Cauchy");
     }
 
     void parseRtkSolution(const std::string& rtkSolPath)
@@ -135,6 +164,7 @@ private:
 
         std::vector<std::pair<double, Eigen::MatrixXd>> rtkSol;
 
+        // srand(32);
         while (std::getline(fs, line))
         {
             std::istringstream iss(line);
@@ -142,14 +172,31 @@ private:
             double gpst, lat, lon, heigh;
             if (!(iss >> idx >> gpst >> lat >> lon >> heigh)) { break; } // error
 
-            Eigen::MatrixXd llh;
-            llh.resize(3, 1);
+            // Eigen::MatrixXd llh;
+            // llh.resize(3, 1);
+            // Eigen::MatrixXd ecef;
+            // ecef.resize(3, 1);
+            // llh(0) = lon;
+            // llh(1) = lat;
+            // llh(2) = heigh;
+            // ecef = m_GNSS_Tools.llh2ecef(llh);
+
             Eigen::MatrixXd ecef;
             ecef.resize(3, 1);
-            llh(0) = lon;
-            llh(1) = lat;
-            llh(2) = heigh;
-            ecef = m_GNSS_Tools.llh2ecef(llh);
+
+            double pos[3] = { lat * D2R, lon * D2R, heigh };
+            double ecefa[3];
+
+            pos2ecef(pos, ecefa);
+
+            ecef(0) = ecefa[0];
+            ecef(1) = ecefa[1];
+            ecef(2) = ecefa[2];
+
+            // double scale = 0.5;
+            // ecef(0) += scale * randm11();
+            // ecef(1) += scale * randm11();
+            // ecef(2) += scale * randm11();
 
             rtkSol.push_back({gpst, ecef});
         }
@@ -161,28 +208,15 @@ private:
 
 
 public:
-    psr_doppler_car_rtk(const std::string& rtkSolPath)
+    psr_doppler_car_rtk(const std::string& rtkInputSolPath, const std::string& fgoOutputSolPath)
     {      
-        parseRtkSolution(rtkSolPath);
+        parseRtkSolution(rtkInputSolPath);
 
-        /* thread for factor graph optimization */
-        // optimizationThread = std::thread(&psr_doppler_car_rtk::solveOptimization, this);
-        
-        /* publisher */
-        // pub_WLSENU = nh.advertise<nav_msgs::Odometry>("WLSGoGPS", 100); // 
-        // pub_FGOENU = nh.advertise<nav_msgs::Odometry>("FGO", 100); //  
-        // pub_fgo_llh = nh.advertise<sensor_msgs::NavSatFix>("fgo_llh", 100);
+        inputSolPath = rtkInputSolPath;
+        outputSolPath = fgoOutputSolPath;
 
-        // /* subscriber of three topics  */
-        // gnss_raw_array_sub.reset(new message_filters::Subscriber<nlosExclusion::GNSS_Raw_Array>(nh, "/gnss_preprocessor_node/GNSSPsrCarRov1", 10000));
-        // doppler_sub.reset(new message_filters::Subscriber<nav_msgs::Odometry>(nh, "/gnss_preprocessor_node/GNSSDopVelRov1", 10000));
-        // /* GNSS measurements from station (reference end) */
-        // station_gnss_raw_array_sub.reset(new message_filters::Subscriber<nlosExclusion::GNSS_Raw_Array>(nh, "/gnss_preprocessor_node/GNSSPsrCarStation1", 256)); // measurements from station
-        // syncdoppler2GNSSRaw.reset(new message_filters::TimeSynchronizer<nlosExclusion::GNSS_Raw_Array, nlosExclusion::GNSS_Raw_Array, nav_msgs::Odometry>(*gnss_raw_array_sub, *station_gnss_raw_array_sub, *doppler_sub, 32));
-        // syncdoppler2GNSSRaw->registerCallback(boost::bind(&psr_doppler_car_rtk::gnssraw_doppler_msg_callback,this, _1, _2, _3));
-
-        // /* publish the path from factor graph optimization */
-        // pub_global_path = nh.advertise<nav_msgs::Path>("/FGOGlobalPath", 100); // 
+        factor_graph.setInputSolPath(inputSolPath);
+        factor_graph.setOutputSolPath(outputSolPath);
         
         /* reference point for ENU calculation */
         ENU_ref<< ref_lon, ref_lat, ref_alt;
@@ -197,7 +231,15 @@ public:
 	 */
     void solveOptimization()
     {
-        if(factor_graph.getDataStreamSize()>3 )
+        if(factor_graph.getDataStreamSize()<=3 )
+        {
+            return;
+        }
+
+        // int ntrials = 1;
+        // int seed_initial = 32;
+        // double fcost_best = 1e20;
+        // for (int seed = seed_initial; seed < seed_initial+ntrials; ++seed)
         {
             /* define the problem */
             ceres::Problem problem;
@@ -222,27 +264,23 @@ public:
             /* initialize factor graph parameters */
             factor_graph.initializeFactorGraphParas();
 
-            /* initialize the previous optimzied states */
-            factor_graph.initializeOldGraph();
-
             /* initialize the newly added states */
-            factor_graph.initializeNewlyAddedGraph();
+            factor_graph.initializeNewlyAddedGraph(0);
 
             /* add parameter blocks */
             factor_graph.addParameterBlocksToGraph(problem);
 
-            /* fix the first parameter block */
-            factor_graph.fixFirstState(false, problem);
-
             /* add Doppler FACTORS to factor graph */
-            factor_graph.addDopplerFactors(problem);
+            factor_graph.addMotionFactors(problem);
+
+            // factor_graph.addDopplerFactors(problem);
 
             factor_graph.addAdrFactors(problem);
 
             // factor_graph.addPseudorangeFactors(problem);
 
-            /* add double-differenced pseudorange/Carrier-phase FACTORS */
-            factor_graph.addDDPsrCarFactors(problem);
+            // /* add double-differenced pseudorange/Carrier-phase FACTORS */
+            // factor_graph.addDDPsrCarFactors(problem);
 
             /* solve the factor graph (float solution) */
             factor_graph.solveFactorGraphFloatSolution(problem, options, summary);
@@ -270,10 +308,10 @@ public:
             // pub_global_path.publish(fgo_path);
 
             /* remove the data outside sliding window */
-            factor_graph.removeStatesOutsideSlidingWindow();
+            // factor_graph.removeStatesOutsideSlidingWindow();
 
             /** */
-            std::cout << "OptTime-> "<< OptTime.toc()<< std::endl;
+            // std::cout << "OptTime-> "<< OptTime.toc()<< std::endl;
         }
     }
 
@@ -341,7 +379,8 @@ public:
         const nav_msgs::OdometryConstPtr& doppler_msg,
         const nav_msgs::OdometryConstPtr& adr_msg)
     {
-        double time_frame = doppler_msg->pose.pose.position.x;
+        // double time_frame = doppler_msg->pose.pose.position.x;
+        double time_frame = gnss_msg->GNSS_Raws[0].GNSS_time;
         factor_graph.input_gnss_raw_data(*gnss_msg, time_frame);
         factor_graph.input_rover_data(*rover_gnss_msg, time_frame);
         factor_graph.input_station_data(*station_gnss_msg, time_frame);
@@ -349,10 +388,47 @@ public:
         factor_graph.input_adrvel_data(*adr_msg, time_frame);
     }
 
+
+    std::vector<nlosExclusion::GNSS_Raw> firstRecArray;
+
+    void addEpochMessages(
+        const nlosExclusion::GNSS_Raw_ArrayConstPtr& rover_gnss_msg, 
+        const nlosExclusion::GNSS_Raw_ArrayConstPtr& station_gnss_msg)
+    {
+        double time_frame = rover_gnss_msg->GNSS_Raws[0].GNSS_time;
+        firstRecArray.push_back(rover_gnss_msg->GNSS_Raws[0]);
+        factor_graph.input_rover_data(*rover_gnss_msg, time_frame);
+        factor_graph.input_station_data(*station_gnss_msg, time_frame);
+    }
+
     ~psr_doppler_car_rtk()
     {
     }
-   
+
+    void dumpVelocityToFile(const std::string& fname)
+    {
+        // char path[PATH_MAX];
+        // getcwd(path,sizeof(path));
+
+        auto items = strSplit(fname, "/");
+        assert(items.size() >= 4);
+
+        auto outName = fname.substr(0, fname.size()-items.back().size()) + "doppler_velocity.csv";
+
+        const int GPS_TO_UTC = 315964782;
+
+        auto tripId=items[items.size()-4]+"/"+items[items.size()-3];
+
+        FILE* fd = fopen(outName.c_str(), "w");
+        assert(fd);
+        fprintf(fd, "tripId,UnixTimeMillis,vx,vy,vz\n");
+        for (const auto& item: firstRecArray) {
+            long unixTime = (item.GNSS_week * 7 * 24 * 3600 + item.GNSS_time + GPS_TO_UTC) * 1000;
+            fprintf(fd, "%s,%ld,%f,%f,%f\n", tripId.c_str(), unixTime, item.rover_vx, item.rover_vy, item.rover_vz);
+        }
+        
+        fclose(fd);
+    }
 };
 
 int main(int argc, char **argv)
@@ -367,36 +443,53 @@ int main(int argc, char **argv)
 
     // const char* solPath = "/home/alexey/smartphone-decimeter-2022/data/train/2020-08-06-US-MTV-1/GooglePixel4/supplemental/gnss_log_rtklib.pos";
     // const char* solPath = "/home/alexey/smartphone-decimeter-2022/data/train/2021-03-16-US-MTV-1/GooglePixel4XL/supplemental/gnss_log_rtklib.pos";
-     const char* solPath = "/home/alexey/smartphone-decimeter-2022/data/train/2020-07-24-US-MTV-2/GooglePixel4XL/supplemental/gnss_log_rtklib.pos";
+    // const char* solPath = "/home/alexey/smartphone-decimeter-2022/data/train/2021-03-16-US-MTV-1/GooglePixel4XL/supplemental/gnss_log_rtklib_gt.pos";
+    // const char* solPath = "/home/alexey/smartphone-decimeter-2022/data/train/2020-07-24-US-MTV-2/GooglePixel4XL/supplemental/gnss_log_rtklib.pos";
     
-    psr_doppler_car_rtk psr_doppler_car_rtk(solPath);
+    std::string inputFile, outputFile;
+    ros::param::get("inputFile", inputFile);
+	ros::param::get("outputFile", outputFile);
+
+    double stationParam[3];
+	ros::param::get("station_x", stationParam[0]);
+	ros::param::get("station_y", stationParam[1]);
+	ros::param::get("station_z", stationParam[2]);
+
+    bool dumpSpeed = false;
+    ros::param::get("dumpSpeed", dumpSpeed);
+
+	station_x = stationParam[0];
+	station_y = stationParam[1];
+	station_z = stationParam[2];
+
+    psr_doppler_car_rtk psr_doppler_car_rtk(inputFile, outputFile);
 
     rosbag::Bag bag("/home/alexey/rtklib.msg");
-    rosbag::View dopplerView(bag, rosbag::TopicQuery("doppler"));
-    rosbag::View adrvelView(bag, rosbag::TopicQuery("adrvel"));
-    rosbag::View rawView(bag, rosbag::TopicQuery("raw"));
+    // rosbag::View dopplerView(bag, rosbag::TopicQuery("doppler"));
+    // rosbag::View adrvelView(bag, rosbag::TopicQuery("adrvel"));
+    // rosbag::View rawView(bag, rosbag::TopicQuery("raw"));
     rosbag::View roverView(bag, rosbag::TopicQuery("rover"));
     rosbag::View stationView(bag, rosbag::TopicQuery("station"));
 
-    auto adrIt = adrvelView.begin();
-    auto dopIt = dopplerView.begin();
-    auto rawIt = rawView.begin();
+    // auto adrIt = adrvelView.begin();
+    // auto dopIt = dopplerView.begin();
+    // auto rawIt = rawView.begin();
     auto roverIt = roverView.begin();
     auto stationIt = stationView.begin();
 
     int msgCount = 0;
-    for (; dopIt != dopplerView.end() && rawIt != rawView.end() 
-                && stationIt != stationView.end() && adrIt != adrvelView.end() && roverIt != roverView.end(); 
-        ++dopIt, ++rawIt, ++stationIt, ++adrIt, ++roverIt)
+    for (;  stationIt != stationView.end() && roverIt != roverView.end(); 
+        ++stationIt, ++roverIt)
     {
-        const nlosExclusion::GNSS_Raw_ArrayConstPtr gnssMsg = (*rawIt).instantiate<nlosExclusion::GNSS_Raw_Array>();
+        // const nlosExclusion::GNSS_Raw_ArrayConstPtr gnssMsg = (*rawIt).instantiate<nlosExclusion::GNSS_Raw_Array>();
         const nlosExclusion::GNSS_Raw_ArrayConstPtr stationMsg = (*stationIt).instantiate<nlosExclusion::GNSS_Raw_Array>();
         const nlosExclusion::GNSS_Raw_ArrayConstPtr roverMsg = (*roverIt).instantiate<nlosExclusion::GNSS_Raw_Array>();
-        const nav_msgs::OdometryConstPtr dopplerMsg = (*dopIt).instantiate<nav_msgs::Odometry>();
-        const nav_msgs::OdometryConstPtr adrvelMsg = (*adrIt).instantiate<nav_msgs::Odometry>();
+        // const nav_msgs::OdometryConstPtr dopplerMsg = (*dopIt).instantiate<nav_msgs::Odometry>();
+        // const nav_msgs::OdometryConstPtr adrvelMsg = (*adrIt).instantiate<nav_msgs::Odometry>();
 
-        psr_doppler_car_rtk.addEpochMessages(gnssMsg, roverMsg, stationMsg, dopplerMsg, adrvelMsg);
+        // psr_doppler_car_rtk.addEpochMessages(gnssMsg, roverMsg, stationMsg, dopplerMsg, adrvelMsg);
         // psr_doppler_car_rtk.addEpochMessages(gnssMsg, stationMsg, adrvelMsg);
+         psr_doppler_car_rtk.addEpochMessages(roverMsg, stationMsg);
 
         // std::cout << (double)gnssMsg->GNSS_Raws[0].GNSS_time << std::endl;
         // printf("GNSS_time=%f\n", gnssMsg->GNSS_Raws[0].GNSS_time);
@@ -419,6 +512,13 @@ int main(int argc, char **argv)
     }
 
     std::cout << "message count read: " << msgCount << std::endl;
+
+    if (dumpSpeed) {
+        psr_doppler_car_rtk.dumpVelocityToFile(outputFile);
+
+        bag.close();
+        return 0;
+    }
 
     psr_doppler_car_rtk.solveOptimization();
 

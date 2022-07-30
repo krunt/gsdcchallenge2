@@ -40,6 +40,18 @@ int main(int argc, char **argv)
 	ros::param::get("navFile", navFile);
 	ros::param::get("out_folder", out_folder);
 
+	double stationParam[3];
+	ros::param::get("station_x", stationParam[0]);
+	ros::param::get("station_y", stationParam[1]);
+	ros::param::get("station_z", stationParam[2]);
+
+	station_x = stationParam[0];
+	station_y = stationParam[1];
+	station_z = stationParam[2];
+
+	// std::cout << roverMeasureFile << ", " << baseMeasureFile << ", " << navFile << std::endl;
+	// std::cout << station_x << ", " << station_y << ", " << station_z << std::endl;
+
 	/* flag for state */
     int n=0,i,stat;
 
@@ -63,7 +75,7 @@ int main(int argc, char **argv)
 	// prcopt.mode = PMODE_SINGLE;			// SPP
 	prcopt.navsys = SYS_GPS | SYS_GAL | SYS_GLO;              // use all satellites system
 	// prcopt.navsys = SYS_ALL;
-	// prcopt.navsys = SYS_GPS | SYS_CMP;
+	// prcopt.navsys = SYS_GPS | SYS_CMP; 
 	// prcopt.navsys = SYS_GPS;
 	prcopt.nf = nf;						// frequency (1:L1,2:L1+L2,3:L1+L2+L5) 
 	prcopt.soltype = soltype;					// 0:forward,1:backward,2:combined
@@ -126,13 +138,13 @@ int main(int argc, char **argv)
 	prcopt.eratio[0] = 300;
 	prcopt.eratio[1] = 300;
 	prcopt.eratio[2] = 300;
-	prcopt.err[1] = 0.003;
-	prcopt.err[2] = 0.003;
+	prcopt.err[1] = 0; //0.003;
+	prcopt.err[2] = 0; //0.003;
 	prcopt.err[3] = 0;
 	prcopt.err[4] = 1;
 	prcopt.err[5] = 52;
-	prcopt.err[6] = 0;
-	prcopt.err[7] = 0;
+	prcopt.err[6] = 0.003;
+	prcopt.err[7] = 0.1;
 	
 	prcopt.std[0] = 30;
 	prcopt.std[1] = 0.03;
@@ -170,9 +182,9 @@ int main(int argc, char **argv)
 
 	/* if you use the RTK mode, specify the position of the station (only used by RTKLIB)
 	 * following is an example position of the base HKSC in Hong Kong */
-	prcopt.rb[0] = -2703115.92;			// base position for relative mode {x,y,z} (ecef) (m)
-	prcopt.rb[1] = -4291767.2;			// base position for relative mode {x,y,z} (ecef) (m)
-	prcopt.rb[2] = 3854247.9;			// base position for relative mode {x,y,z} (ecef) (m)
+	prcopt.rb[0] = station_x;			// base position for relative mode {x,y,z} (ecef) (m)
+	prcopt.rb[1] = station_y;			// base position for relative mode {x,y,z} (ecef) (m)
+	prcopt.rb[2] = station_z;			// base position for relative mode {x,y,z} (ecef) (m)
 
 	/* set output files */
 	strcpy(outfile, strdup(out_folder.c_str()));
@@ -197,7 +209,8 @@ int main(int argc, char **argv)
 	}
 	// while(ros::ok())
 	// {}
-    ros::spin();
+    // ros::spin();
+	ros::spinOnce();
     return 0;
 }
 
